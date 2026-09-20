@@ -49,8 +49,7 @@ class Node:
         return self.x, self.y
 
     def __lt__(self, other):
-        """Written by Member 2 — Md. Jahidul Islam. Do not edit here."""
-        raise NotImplementedError("owned by Member 2 — Md. Jahidul Islam")
+      return self.f_cost < other.f_cost
 
 class Grid:
     def __init__(self, width, height, tile_size, headless=False):
@@ -106,11 +105,15 @@ class Grid:
         return neighbors
 
     def reset_path_costs(self):
-        """Written by Member 2 — Md. Jahidul Islam. Do not edit here."""
-        raise NotImplementedError("owned by Member 2 — Md. Jahidul Islam")
+         for col in self.nodes:
+            for node in col:
+                node.g_cost = float("inf")
+                node.h_cost = 0
+                node.f_cost = float("inf")
+                node.parent = None
+
 
     def find_path(self, start_node, end_node):
-        """OWNER: Member 2. Returns a list of Nodes from start to end, or []."""
         self.reset_path_costs()
         start_node.g_cost = 0
         start_node.h_cost = self.heuristic(start_node, end_node)
@@ -133,6 +136,7 @@ class Grid:
                     continue
 
                 base_dist = self.get_distance(current, neighbor)
+                # OWNER: Member 3 — penalty term makes over-used tiles expensive
                 penalty = neighbor.movement_penalty
                 new_cost = current.g_cost + base_dist + penalty
 
@@ -148,13 +152,19 @@ class Grid:
         return []  # No path found
 
     def retrace_path(self, start_node, end_node):
-        """Written by Member 2 — Md. Jahidul Islam. Do not edit here."""
-        raise NotImplementedError("owned by Member 2 — Md. Jahidul Islam")
-
+        path = []
+        current = end_node
+        while current != start_node:
+            path.append(current)
+            current = current.parent
+        path.reverse()
+        return path
     def get_distance(self, node_a, node_b):
-        """Written by Member 2 — Md. Jahidul Islam. Do not edit here."""
-        raise NotImplementedError("owned by Member 2 — Md. Jahidul Islam")
+        dist_x = abs(node_a.x - node_b.x)
+        dist_y = abs(node_a.y - node_b.y)
+        if dist_x > dist_y:
+            return 14 * dist_y + 10 * (dist_x - dist_y)
+        return 14 * dist_x + 10 * (dist_y - dist_x)
 
     def heuristic(self, node_a, node_b):
-        """Written by Member 2 — Md. Jahidul Islam. Do not edit here."""
-        raise NotImplementedError("owned by Member 2 — Md. Jahidul Islam")
+        return (abs(node_a.x - node_b.x) + abs(node_a.y - node_b.y)) * 10
