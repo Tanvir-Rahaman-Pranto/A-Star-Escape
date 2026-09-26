@@ -1,68 +1,67 @@
-
+import pygame
 import heapq
 import random
-
-import pygame
-
-from settings import (
-    COLOR_BG, COLOR_PORTAL, COLOR_WALL,
-    MAP_FILL_PERCENT, MAP_SMOOTH_ITERATIONS,
-    MAP_WALL_BIRTH_LIMIT, MAP_WALL_DEATH_LIMIT,
-)
+from settings import *
+from genetic_map_gen import GeneticOptimizer
 
 
 class Node:
-    """A single grid cell. OWNER: Member 1 (fields marked below excepted)."""
-
     def __init__(self, x, y, tile_size):
         self.x = x
         self.y = y
         self.tile_size = tile_size
         self.rect = pygame.Rect(x * tile_size, y * tile_size, tile_size, tile_size)
         self.is_wall = False
-        self.is_portal = False
-        self.movement_penalty = 0
-        self.g_cost = float("inf")
+        self.is_portal = False 
+        self.is_energy = False
+        self.movement_penalty = 0 
+        self.g_cost = float('inf')
         self.h_cost = 0
-        self.f_cost = float("inf")
+        self.f_cost = float('inf')
         self.parent = None
-        self.visited_count = 0
-
+        self.visited_count = 0 
+        
     def draw(self, surface):
-        """OWNER: Member 1."""
         if self.is_wall:
             color = COLOR_WALL
         elif self.is_portal:
             color = COLOR_PORTAL
+        elif self.is_energy:
+            color = COLOR_ENERGY
         else:
             base_color = list(COLOR_BG)
             if self.movement_penalty > 0:
                 base_color[0] = min(255, base_color[0] + self.movement_penalty * 2)
                 base_color[1] = max(0, base_color[1] - self.movement_penalty)
-            color = tuple(base_color)
+            
+            if self.visited_count > 0:
+                base_color[2] = min(255, base_color[2] + self.visited_count * 20)
 
+            color = tuple(base_color)
+                
         pygame.draw.rect(surface, color, self.rect)
-        pygame.draw.rect(surface, (30, 30, 35), self.rect, 1)  # Border
+        pygame.draw.rect(surface, (30, 30, 35), self.rect, 1)
 
     def get_pos(self):
-        """OWNER: Member 1."""
         return self.x, self.y
 
     def __lt__(self, other):
-      return self.f_cost < other.f_cost
+        if self.f_cost == other.f_cost:
+            return self.h_cost < other.h_cost
+        return self.f_cost < other.f_cost
+
 
 class Grid:
     def __init__(self, width, height, tile_size, headless=False):
-        """OWNER: Member 1."""
         self.width = width
         self.height = height
         self.tile_size = tile_size
         self.headless = headless
         self.nodes = [[Node(x, y, tile_size) for y in range(height)] for x in range(width)]
-
+        self.optimizer = GeneticOptimizer()
+        
         if not self.headless:
-            self.generate_map()
-
+            self.generate_map(level=1)
             
     def generate_map(self, level=1):
         """Evolves parameters if level progression, then applies them."""
@@ -209,13 +208,11 @@ class Grid:
         self.nodes[self.width - 2][self.height - 2].is_portal = True
 
     def draw(self, surface):
-        """OWNER: Member 1."""
         for x in range(self.width):
             for y in range(self.height):
                 self.nodes[x][y].draw(surface)
 
     def get_neighbors(self, node):
-        """OWNER: Member 1. 4-directional, walls excluded."""
         neighbors = []
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             nx, ny = node.x + dx, node.y + dy
@@ -225,51 +222,47 @@ class Grid:
         return neighbors
 
     def reset_path_costs(self):
-         for col in self.nodes:
+        for col in self.nodes:
             for node in col:
-                node.g_cost = float("inf")
+                node.g_cost = float('inf')
                 node.h_cost = 0
-                node.f_cost = float("inf")
+                node.f_cost = float('inf')
                 node.parent = None
-
 
     def find_path(self, start_node, end_node):
         self.reset_path_costs()
         start_node.g_cost = 0
         start_node.h_cost = self.heuristic(start_node, end_node)
         start_node.f_cost = start_node.g_cost + start_node.h_cost
-
+        
         open_set = []
         heapq.heappush(open_set, start_node)
-        closed_set = set()
-
+        closed_set = set() 
+        
         while open_set:
             current = heapq.heappop(open_set)
-
             if current == end_node:
                 return self.retrace_path(start_node, end_node)
-
+                
             closed_set.add(current)
-
+            
             for neighbor in self.get_neighbors(current):
                 if neighbor in closed_set:
                     continue
-
+                
                 base_dist = self.get_distance(current, neighbor)
-                # OWNER: Member 3 — penalty term makes over-used tiles expensive
                 penalty = neighbor.movement_penalty
                 new_cost = current.g_cost + base_dist + penalty
-
+                
                 if new_cost < neighbor.g_cost:
                     neighbor.g_cost = new_cost
                     neighbor.h_cost = self.heuristic(neighbor, end_node)
                     neighbor.f_cost = neighbor.g_cost + neighbor.h_cost
                     neighbor.parent = current
-
                     if neighbor not in open_set:
                         heapq.heappush(open_set, neighbor)
-
-        return []  # No path found
+                        
+        return []
 
     def retrace_path(self, start_node, end_node):
         path = []
@@ -279,6 +272,7 @@ class Grid:
             current = current.parent
         path.reverse()
         return path
+
     def get_distance(self, node_a, node_b):
         dist_x = abs(node_a.x - node_b.x)
         dist_y = abs(node_a.y - node_b.y)
