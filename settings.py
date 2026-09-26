@@ -17,6 +17,12 @@ DEFAULT_SMOOTH_ITERATIONS = 4
 DEFAULT_WALL_BIRTH_LIMIT = 4
 DEFAULT_WALL_DEATH_LIMIT = 4
 
+# Map Generation settings
+MAP_FILL_PERCENT = 0.40
+MAP_SMOOTH_ITERATIONS = 4
+MAP_WALL_BIRTH_LIMIT = 4
+MAP_WALL_DEATH_LIMIT = 4
+
 # Colors (Minimalist / High Contrast)
 COLOR_BG = (20, 20, 25)        # Dark Slate / Almost Black
 COLOR_WALL = (40, 40, 50)      # Darker Wall
