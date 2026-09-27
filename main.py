@@ -1,9 +1,12 @@
 """
-main.py  —  Week 1
+main.py  —  Week 2
 OWNER: Member 5 — Mrittika Nandi (Integration & Testing)
 
-Wires the four Week 1 deliverables together into a playable loop:
-setup -> grid/maze -> player movement & collision -> A* enemy chase.
+Wires the game's pieces together into a playable loop. Week 2 changes from
+Week 1: the enemy now receives the player's real velocity and the current
+level (needed for backtracking speed-up and predictive interception), and
+a failed loop adapts the existing map from the heatmap instead of always
+generating a brand-new one.
 
 Run with:  python main.py
 Controls:  WASD / arrow keys to move, SPACE to reset the loop.
@@ -64,10 +67,15 @@ class Game:
                 self.reset_game_loop(success=False)
 
     def reset_game_loop(self, success=False):
-        """Week 1: always regenerate a fresh map.
-        Week 2: on failure, call grid.adapt_to_history(heatmap) instead."""
-        self.gamestate.reset_loop(self.player.visited_nodes, success=success)
-        self.grid.generate_map()
+        """On success, generate a fresh (harder) map for the new level.
+        On failure, adapt the existing map around where the player actually
+        went, instead of throwing the whole layout away."""
+        heatmap = self.gamestate.reset_loop(self.player.visited_nodes, success=success)
+
+        if success:
+            self.grid.generate_map(level=self.gamestate.level)
+        else:
+            self.grid.adapt_to_history(heatmap)
 
         self.player = Player(self.grid.nodes[1][1], self.grid)
         self.enemy = Enemy(
@@ -80,7 +88,10 @@ class Game:
             return
 
         self.player.update(dt)
-        self.enemy.update(dt, self.player.node, self.player.is_backtracking)
+        self.enemy.update(
+            dt, self.player.node, self.player.vel,
+            self.gamestate.level, self.player.is_backtracking,
+        )
 
         # Win: reached the portal
         if self.player.node.is_portal:
