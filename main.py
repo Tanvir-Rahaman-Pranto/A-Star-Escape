@@ -13,6 +13,14 @@ PLAYING itself still runs Week 2's loop (win -> GA, lose -> adapt_to_history)
 and its own RUNNING/GAMEOVER sub-state, unchanged. The Menu, SettingsMenu and
 TutorialScreen classes are Member 1's (menu.py); this file only calls them and
 reacts to the action strings they return.
+main.py  —  Week 2
+OWNER: Member 5 — Mrittika Nandi (Integration & Testing)
+
+Wires the game's pieces together into a playable loop. Week 2 changes from
+Week 1: the enemy now receives the player's real velocity and the current
+level (needed for backtracking speed-up and predictive interception), and
+a failed loop adapts the existing map from the heatmap instead of always
+generating a brand-new one.
 
 Run with:  python main.py
 Controls:  Menu/Settings: arrows or mouse + Enter; Playing: WASD/arrows to
@@ -137,6 +145,28 @@ class Game:
                         self.reset_game_loop(success=False)
                     elif event.key == pygame.K_ESCAPE:
                         self.app_state = AppState.MENU
+                self.running = False
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                self.reset_game_loop(success=False)
+
+    def reset_game_loop(self, success=False):
+        """On success, generate a fresh (harder) map for the new level.
+        On failure, adapt the existing map around where the player actually
+        went, instead of throwing the whole layout away."""
+        heatmap = self.gamestate.reset_loop(self.player.visited_nodes, success=success)
+
+        if success:
+            self.grid.generate_map(level=self.gamestate.level)
+        else:
+            self.grid.adapt_to_history(heatmap)
+
+        self.player = Player(self.grid.nodes[1][1], self.grid)
+        self.enemy = Enemy(
+            self.grid.nodes[GRID_WIDTH - 2][GRID_HEIGHT - 2], self.grid
+        )
+        self.state = "RUNNING"
 
     def update(self, dt):
         if self.app_state == AppState.TUTORIAL:
