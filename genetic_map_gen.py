@@ -40,6 +40,7 @@ class GeneticOptimizer:
             wall_birth_limit=4
         )
         self.generation = 0
+        self.last_fitness = 0.0  # read by main.py's HUD
 
     def evolve(self, grid_class, width, height, level):
         """
@@ -74,6 +75,7 @@ class GeneticOptimizer:
         print(f"[GA] Gen {self.generation} | Best Fitness: {best_candidate.fitness:.2f} | Genes: {best_candidate.genotype}")
         
         self.current_genotype = best_candidate.genotype
+        self.last_fitness = best_candidate.fitness
         return self.current_genotype
 
     def evaluate_fitness(self, genes, grid_class, width, height):

@@ -206,15 +206,16 @@ class TutorialScreen:
 
     STEPS = [
         "WASD / Arrow keys move you (the cyan circle).",
-        "Brick tiles are walls — you can't pass through them.",
-        "Revisiting a tile you've already walked lights it up: it now costs\n"
+        "Brick tiles are walls - you can't pass through them.",
+        "Revisiting a tile you've already walked lights it up: it now costs "
         "the enemy's A* more to path through, so backtracking is a real tool.",
         "Reach the green portal to finish the tutorial.",
     ]
+    CAPTION_MAX_WIDTH = SCREEN_WIDTH - 120  # leaves a margin on both sides
 
     def __init__(self):
         self.font_caption = pygame.font.SysFont(MENU_FONT_NAME, 22, bold=True)
-        self.font_hint = pygame.font.SysFont(MENU_FONT_NAME, 18)
+        self.font_hint = pygame.font.SysFont(MENU_FONT_NAME, 20, bold=True)
         self.grid = Grid(GRID_WIDTH, GRID_HEIGHT, TILE_SIZE)
         self.player = Player(self.grid.nodes[1][1], self.grid)
         self.step = 0
@@ -236,19 +237,47 @@ class TutorialScreen:
             self.completed = True
             self.step = 3
 
+    def _wrap(self, text, font, max_width):
+        """OWNER: Member 1. Break `text` into lines that each fit max_width —
+        pygame's font.render() has no built-in word wrap, so a long caption
+        would otherwise run straight off the sides of the screen."""
+        words = text.split(" ")
+        lines, current = [], ""
+        for word in words:
+            candidate = f"{current} {word}".strip()
+            if font.size(candidate)[0] <= max_width:
+                current = candidate
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+        return lines
+
     def draw(self, surface):
         surface.fill((20, 20, 25))
         self.grid.draw(surface)
         self.player.draw(surface)
 
-        caption = self.font_caption.render(self.STEPS[min(self.step, len(self.STEPS) - 1)], True, COLOR_TEXT)
-        box = caption.get_rect(center=(SCREEN_WIDTH // 2, 40))
-        pygame.draw.rect(surface, COLOR_MENU_BG, box.inflate(40, 20))
-        surface.blit(caption, box)
+        # --- Always-visible control bar across the top ---
+        bar = pygame.Rect(0, 0, SCREEN_WIDTH, 100)
+        pygame.draw.rect(surface, COLOR_MENU_BG, bar)
+        pygame.draw.line(surface, (70, 70, 85), (0, 100), (SCREEN_WIDTH, 100), 2)
 
-        if self.completed:
-            done = self.font_caption.render("Tutorial complete! Press Esc for the Menu.", True, (50, 255, 100))
-            surface.blit(done, done.get_rect(center=(SCREEN_WIDTH // 2, 90)))
+        caption_text = self.STEPS[min(self.step, len(self.STEPS) - 1)]
+        lines = self._wrap(caption_text, self.font_caption, self.CAPTION_MAX_WIDTH)
+        line_h = self.font_caption.get_height() + 4
+        start_y = 16
+        for i, line in enumerate(lines):
+            rendered = self.font_caption.render(line, True, COLOR_TEXT)
+            surface.blit(rendered, rendered.get_rect(center=(SCREEN_WIDTH // 2, start_y + i * line_h)))
 
-        hint = self.font_hint.render("Esc: back to Menu", True, COLOR_TEXT)
-        surface.blit(hint, hint.get_rect(bottomright=(SCREEN_WIDTH - 20, SCREEN_HEIGHT - 20)))
+        hint_text = (
+            "Tutorial complete! Press ESC to return to the Menu."
+            if self.completed else
+            f"Step {self.step + 1}/{len(self.STEPS)}   —   press ESC any time to return to the Menu"
+        )
+        hint_color = (50, 255, 100) if self.completed else (150, 150, 170)
+        hint = self.font_hint.render(hint_text, True, hint_color)
+        surface.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 100 - 20)))

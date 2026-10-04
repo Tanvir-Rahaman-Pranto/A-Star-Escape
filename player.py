@@ -1,7 +1,8 @@
 import pygame
 
 from settings import (
-    COLOR_PLAYER, HESITATION_SECONDS, PENALTY_BACKTRACK, PENALTY_HESITATION, TILE_SIZE,
+    COLOR_PLAYER, HESITATION_SECONDS, PENALTY_BACKTRACK, PENALTY_HESITATION,
+    PENALTY_MAX, TILE_SIZE,
 )
 
 import random
@@ -67,57 +68,31 @@ class Player:
             self.last_node = self.node
             self.node = current_node
 
+            # --- Energy node. OWNER: Member 1 ---
+            if self.node.is_energy:
+                self.node.is_energy = False
+                # Strategic instability: reset backtracking history
+                self.visited_nodes.clear()
+                # Temporary speed boost
+                self.max_speed = 600
+                self.boost_timer = 2.0
+
             # --- Backtracking detection. OWNER: Member 3 ---
             if self.node in self.visited_nodes:
-              self.node.add_penalty(PENALTY_BACKTRACK)
-              self.is_backtracking = True
+                self.node.movement_penalty = min(PENALTY_MAX, self.node.movement_penalty + PENALTY_BACKTRACK)
+                self.is_backtracking = True
             else:
                 self.visited_nodes.add(self.node)
                 self.is_backtracking = False
 
         # --- Hesitation (standing still). OWNER: Member 3 ---
-       if self.vel.length() < 50:
-         self.hesitation_timer += dt
-         if self.hesitation_timer > HESITATION_SECONDS:
-        self.node.add_penalty(PENALTY_HESITATION)
-else:
-    self.hesitation_timer = 0
-        if 0 <= grid_x < self.grid.width and 0 <= grid_y < self.grid.height:
-            current_node = self.grid.nodes[grid_x][grid_y]
-            
-            # Change Node Logic
-            if current_node != self.node:
-                self.last_node = self.node
-                self.node = current_node
-                
-                # Energy Node Logic
-                if self.node.is_energy:
-                    self.node.is_energy = False
-                    # Strategic Instability: Reset backtracking history
-                    self.visited_nodes.clear()
-                    # Also boost speed temporarily?
-                    self.max_speed = 600 
-                    self.boost_timer = 2.0
-                
-                # Backtracking Logic
-                if self.node in self.visited_nodes:
-                    # Player is backtracking! Increase cost.
-                    self.node.movement_penalty += 20
-                    self.is_backtracking = True
-                else:
-                    self.visited_nodes.add(self.node)
-                    self.is_backtracking = False
-                    # "Preferred routes lower estimated cost" -> This is for heuristic learning over loops.
-                    # For now just track visited.
-            
-            # Hesitation Logic (Standing still)
-            if self.vel.length() < 50:
-                self.hesitation_timer += dt
-                if self.hesitation_timer > 1.0: # 1 second of standing still
-                    self.node.movement_penalty += 1
-            else:
-                self.hesitation_timer = 0
-                
+        if self.vel.length() < 50:
+            self.hesitation_timer += dt
+            if self.hesitation_timer > HESITATION_SECONDS:
+                self.node.movement_penalty = min(PENALTY_MAX, self.node.movement_penalty + PENALTY_HESITATION)
+        else:
+            self.hesitation_timer = 0
+
         # Boost Timer Logic
         if self.boost_timer > 0:
             self.boost_timer -= dt

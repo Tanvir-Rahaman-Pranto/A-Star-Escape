@@ -76,10 +76,10 @@ class Grid:
 
     # Step 2: Write apply_parameters end to end
     def apply_parameters(self, 
-                         fill_percent=DEFAULT_FILL_PERCENT, 
-                         smooth_iterations=DEFAULT_SMOOTH_ITERATIONS, 
-                         wall_birth_limit=DEFAULT_WALL_BIRTH_LIMIT, 
-                         wall_death_limit=DEFAULT_WALL_DEATH_LIMIT):
+                         fill_percent=MAP_FILL_PERCENT, 
+                         smooth_iterations=MAP_SMOOTH_ITERATIONS, 
+                         wall_birth_limit=MAP_WALL_BIRTH_LIMIT, 
+                         wall_death_limit=MAP_WALL_DEATH_LIMIT):
         # 1. Random fill with solid boundaries
         for x in range(self.width):
             for y in range(self.height):
@@ -114,7 +114,7 @@ class Grid:
         )
 
     # Step 1: Start smoothing and wall count (no find_path dependency)
-    def smooth_map(self, birth_limit=DEFAULT_WALL_BIRTH_LIMIT, death_limit=DEFAULT_WALL_DEATH_LIMIT):
+    def smooth_map(self, birth_limit=MAP_WALL_BIRTH_LIMIT, death_limit=MAP_WALL_DEATH_LIMIT):
         new_map_walls = [[False for _ in range(self.height)] for _ in range(self.width)]
         
         for x in range(self.width):
