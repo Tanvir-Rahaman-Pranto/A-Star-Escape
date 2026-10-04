@@ -1,4 +1,9 @@
 import pygame
+
+from settings import (
+    COLOR_PLAYER, HESITATION_SECONDS, PENALTY_BACKTRACK, PENALTY_HESITATION, TILE_SIZE,
+)
+
 import random
 from settings import *
 
@@ -53,6 +58,30 @@ class Player:
         # Update current node
         grid_x = int(self.pos.x // TILE_SIZE)
         grid_y = int(self.pos.y // TILE_SIZE)
+        if not (0 <= grid_x < self.grid.width and 0 <= grid_y < self.grid.height):
+            return
+
+        current_node = self.grid.nodes[grid_x][grid_y]
+
+        if current_node != self.node:
+            self.last_node = self.node
+            self.node = current_node
+
+            # --- Backtracking detection. OWNER: Member 3 ---
+            if self.node in self.visited_nodes:
+              self.node.add_penalty(PENALTY_BACKTRACK)
+              self.is_backtracking = True
+            else:
+                self.visited_nodes.add(self.node)
+                self.is_backtracking = False
+
+        # --- Hesitation (standing still). OWNER: Member 3 ---
+       if self.vel.length() < 50:
+         self.hesitation_timer += dt
+         if self.hesitation_timer > HESITATION_SECONDS:
+        self.node.add_penalty(PENALTY_HESITATION)
+else:
+    self.hesitation_timer = 0
         if 0 <= grid_x < self.grid.width and 0 <= grid_y < self.grid.height:
             current_node = self.grid.nodes[grid_x][grid_y]
             
