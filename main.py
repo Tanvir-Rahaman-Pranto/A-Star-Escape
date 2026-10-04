@@ -1,12 +1,22 @@
 """
-main.py  —  Week 1
+main.py  —  Week 3
 OWNER: Member 5 — Mrittika Nandi (Integration & Testing)
 
-Wires the four Week 1 deliverables together into a playable loop:
-setup -> grid/maze -> player movement & collision -> A* enemy chase.
+Week 3 adds the front-end flow around the Week 2 gameplay loop:
+
+    MENU --start--> PLAYING --(Esc)--> MENU
+    MENU --settings--> SETTINGS --back--> MENU
+    MENU --tutorial--> TUTORIAL --back/Esc--> MENU
+    MENU --exit--> window closes
+
+PLAYING itself still runs Week 2's loop (win -> GA, lose -> adapt_to_history)
+and its own RUNNING/GAMEOVER sub-state, unchanged. The Menu, SettingsMenu and
+TutorialScreen classes are Member 1's (menu.py); this file only calls them and
+reacts to the action strings they return.
 
 Run with:  python main.py
-Controls:  WASD / arrow keys to move, SPACE to reset the loop.
+Controls:  Menu/Settings: arrows or mouse + Enter; Playing: WASD/arrows to
+           move, SPACE to reset the loop, Esc for the Menu.
 """
 
 import sys
@@ -16,6 +26,7 @@ import pygame
 from enemy import Enemy
 from gamestate import GameState
 from grid import Grid
+from menu import AppState, Menu, SettingsMenu, TutorialScreen, apply_difficulty
 from player import Player
 from settings import (
     COLOR_BG, COLOR_TEXT, FPS, GRID_HEIGHT, GRID_WIDTH,
@@ -34,18 +45,49 @@ class Game:
         self.font_large = pygame.font.SysFont("Arial", 64, bold=True)
         self.font_small = pygame.font.SysFont("Consolas", 24, bold=True)
 
-        self.state = "RUNNING"  # RUNNING | GAMEOVER
-        self.load()
+        # Menu-side objects (Member 1). Built once so Settings remembers the
+        # chosen difficulty across visits.
+        self.menu = Menu()
+        self.settings_menu = SettingsMenu()
+        self.tutorial = None
+
+        self.app_state = AppState.MENU
+        self.state = "RUNNING"  # RUNNING | GAMEOVER — only meaningful in PLAYING
+        self.gamestate = None
+        self.grid = None
+        self.player = None
+        self.enemy = None
+
+    # ------------------------------------------------------------------
+    # Loading / resetting the PLAYING state
+    # ------------------------------------------------------------------
 
     def load(self):
+        """Start a brand-new run from Level 1 (called on "Start Game")."""
         self.gamestate = GameState(GRID_WIDTH, GRID_HEIGHT)
         self.grid = Grid(GRID_WIDTH, GRID_HEIGHT, TILE_SIZE)
+        self.player = Player(self.grid.nodes[1][1], self.grid)
+        self.enemy = Enemy(self.grid.nodes[GRID_WIDTH - 2][GRID_HEIGHT - 2], self.grid)
+        apply_difficulty(self, self.settings_menu.difficulty)
+        self.state = "RUNNING"
+        self.app_state = AppState.PLAYING
+
+    def reset_game_loop(self, success=False):
+        """Win: the GA builds the next level's map. Loss: the current map adapts."""
+        heatmap = self.gamestate.reset_loop(self.player.visited_nodes, success=success)
+        if success:
+            self.grid.generate_map(level=self.gamestate.level)
+        else:
+            self.grid.adapt_to_history(heatmap)
 
         self.player = Player(self.grid.nodes[1][1], self.grid)
-        self.enemy = Enemy(
-            self.grid.nodes[GRID_WIDTH - 2][GRID_HEIGHT - 2], self.grid
-        )
+        self.enemy = Enemy(self.grid.nodes[GRID_WIDTH - 2][GRID_HEIGHT - 2], self.grid)
+        apply_difficulty(self, self.settings_menu.difficulty)
         self.state = "RUNNING"
+
+    # ------------------------------------------------------------------
+    # Main loop
+    # ------------------------------------------------------------------
 
     def run(self):
         while self.running:
@@ -54,33 +96,61 @@ class Game:
             self.update(dt)
             self.draw()
 
+    def quit(self):
+        self.running = False
+        pygame.quit()
+        sys.exit()
+
     def events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                self.running = False
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                self.reset_game_loop(success=False)
+                self.quit()
+                return
 
-    def reset_game_loop(self, success=False):
-        """Week 1: always regenerate a fresh map.
-        Week 2: on failure, call grid.adapt_to_history(heatmap) instead."""
-        self.gamestate.reset_loop(self.player.visited_nodes, success=success)
-        self.grid.generate_map()
+            if self.app_state == AppState.MENU:
+                action = self.menu.handle_event(event)
+                if action == "start":
+                    self.load()
+                elif action == "settings":
+                    self.app_state = AppState.SETTINGS
+                elif action == "tutorial":
+                    self.tutorial = TutorialScreen()
+                    self.app_state = AppState.TUTORIAL
+                elif action == "exit":
+                    self.quit()
+                    return
 
-        self.player = Player(self.grid.nodes[1][1], self.grid)
-        self.enemy = Enemy(
-            self.grid.nodes[GRID_WIDTH - 2][GRID_HEIGHT - 2], self.grid
-        )
-        self.state = "RUNNING"
+            elif self.app_state == AppState.SETTINGS:
+                action = self.settings_menu.handle_event(event)
+                if action == "back":
+                    self.app_state = AppState.MENU
+
+            elif self.app_state == AppState.TUTORIAL:
+                action = self.tutorial.handle_event(event)
+                if action == "back":
+                    self.tutorial = None
+                    self.app_state = AppState.MENU
+
+            elif self.app_state == AppState.PLAYING:
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        self.reset_game_loop(success=False)
+                    elif event.key == pygame.K_ESCAPE:
+                        self.app_state = AppState.MENU
 
     def update(self, dt):
-        if self.state == "GAMEOVER":
+        if self.app_state == AppState.TUTORIAL:
+            self.tutorial.update(dt)
+            return
+
+        if self.app_state != AppState.PLAYING or self.state == "GAMEOVER":
             return
 
         self.player.update(dt)
-        self.enemy.update(dt, self.player.node, self.player.is_backtracking)
+        self.enemy.update(
+            dt, self.player.node, self.player.vel,
+            self.gamestate.level, self.player.is_backtracking,
+        )
 
         # Win: reached the portal
         if self.player.node.is_portal:
@@ -92,6 +162,18 @@ class Game:
             self.state = "GAMEOVER"
 
     def draw(self):
+        if self.app_state == AppState.MENU:
+            self.menu.draw(self.screen)
+        elif self.app_state == AppState.SETTINGS:
+            self.settings_menu.draw(self.screen)
+        elif self.app_state == AppState.TUTORIAL:
+            self.tutorial.draw(self.screen)
+        else:
+            self.draw_playing()
+
+        pygame.display.flip()
+
+    def draw_playing(self):
         self.screen.fill(COLOR_BG)
         self.grid.draw(self.screen)
 
@@ -107,9 +189,24 @@ class Game:
 
         if self.state == "RUNNING":
             level_text = self.font_small.render(
-                f"LEVEL {self.gamestate.level}", True, COLOR_TEXT
+                f"LEVEL {self.gamestate.level}   LOOP {self.gamestate.loops_this_level}"
+                f"   [{self.settings_menu.difficulty}]",
+                True, COLOR_TEXT,
             )
             self.screen.blit(level_text, (20, 20))
+
+            # HUD: what the GA and the enemy are doing right now (demo material)
+            opt = self.grid.optimizer
+            genes = opt.current_genotype
+            ai_text = self.font_small.render(
+                f"GA gen {opt.generation}  fitness {opt.last_fitness:.0f}  "
+                f"fill {genes.fill_percent:.2f}  |  enemy speed {self.enemy.speed:.0f}",
+                True, (150, 150, 170),
+            )
+            self.screen.blit(ai_text, (20, SCREEN_HEIGHT - 36))
+
+            esc_hint = self.font_small.render("Esc: Menu", True, (150, 150, 170))
+            self.screen.blit(esc_hint, esc_hint.get_rect(topright=(SCREEN_WIDTH - 20, 20)))
 
             if self.player.pos.distance_to(self.enemy.pos) < 300:
                 text = self.font_small.render("MOVE!", True, (255, 50, 50))
@@ -128,13 +225,11 @@ class Game:
             )
 
             sub = self.font_small.render(
-                "Press SPACE to Reset Loop", True, (200, 200, 200)
+                "Press SPACE to Reset Loop  —  Esc for Menu", True, (200, 200, 200)
             )
             self.screen.blit(
                 sub, sub.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 20))
             )
-
-        pygame.display.flip()
 
 
 if __name__ == "__main__":
