@@ -12,7 +12,9 @@ SHARED FILE.
 
 import pygame
 
-from settings import COLOR_PLAYER, TILE_SIZE
+from settings import (
+    COLOR_PLAYER, HESITATION_SECONDS, PENALTY_BACKTRACK, PENALTY_HESITATION, TILE_SIZE,
+)
 
 
 class Player:
@@ -82,19 +84,19 @@ class Player:
 
             # --- Backtracking detection. OWNER: Member 3 ---
             if self.node in self.visited_nodes:
-                self.node.movement_penalty += 20
-                self.is_backtracking = True
+              self.node.add_penalty(PENALTY_BACKTRACK)
+              self.is_backtracking = True
             else:
                 self.visited_nodes.add(self.node)
                 self.is_backtracking = False
 
         # --- Hesitation (standing still). OWNER: Member 3 ---
-        if self.vel.length() < 50:
-            self.hesitation_timer += dt
-            if self.hesitation_timer > 1.0:
-                self.node.movement_penalty += 1
-        else:
-            self.hesitation_timer = 0
+       if self.vel.length() < 50:
+         self.hesitation_timer += dt
+         if self.hesitation_timer > HESITATION_SECONDS:
+        self.node.add_penalty(PENALTY_HESITATION)
+else:
+    self.hesitation_timer = 0
 
     def collide_with_walls(self):
         """OWNER: Member 1. Checks the 8 tiles around the player's cell."""
