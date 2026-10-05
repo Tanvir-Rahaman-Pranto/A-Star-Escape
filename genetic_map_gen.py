@@ -1,118 +1,121 @@
-import random
-import heapq
-from dataclasses import dataclass
+"""
+genetic_map_gen.py  —  Week 3
+Genetic algorithm for evolving cellular-automata map generation genotypes.
+"""
+
 import copy
+import random
+from dataclasses import dataclass
+
+from settings import (
+    GA_FILL_MAX, GA_FILL_MIN, GA_FITNESS_SAMPLES, GA_LEVEL_PRESSURE_MAX,
+    GA_LEVEL_PRESSURE_PER_LEVEL, GA_LIMIT_MAX, GA_LIMIT_MIN,
+    GA_MUTATION_RATE, GA_POPULATION_SIZE, GA_SMOOTH_MAX, GA_SMOOTH_MIN,
+    GA_SURVIVORS, MAP_FILL_PERCENT, MAP_SMOOTH_ITERATIONS,
+    MAP_WALL_BIRTH_LIMIT, MAP_WALL_DEATH_LIMIT,
+)
+
 
 @dataclass
 class MapGenotype:
-    """Represents the DNA of a map generation strategy."""
     fill_percent: float
     smooth_iterations: int
-    wall_death_limit: int # Cellular Automata parameter
-    wall_birth_limit: int # Cellular Automata parameter
-    mutation_rate: float = 0.4
+    wall_birth_limit: int
+    wall_death_limit: int
 
-    def mutate(self):
-        """Randomly adjust genes."""
-        if random.random() < self.mutation_rate:
+    def mutate(self, rate=GA_MUTATION_RATE, fill_floor=GA_FILL_MIN):
+        if random.random() < rate:
             self.fill_percent += random.uniform(-0.05, 0.05)
-            self.fill_percent = max(0.35, min(0.55, self.fill_percent)) # Clamp
-            
-        if random.random() < self.mutation_rate:
+        if random.random() < rate:
             self.smooth_iterations += random.choice([-1, 1])
-            self.smooth_iterations = max(2, min(7, self.smooth_iterations))
+        if random.random() < rate:
+            self.wall_birth_limit += random.choice([-1, 1])
+        if random.random() < rate:
+            self.wall_death_limit += random.choice([-1, 1])
+        self.clamp(fill_floor)
 
-        if random.random() < self.mutation_rate:
-             # Occasionally flip rules for chaos
-            self.wall_birth_limit = 4 if random.random() > 0.5 else 5
+    def clamp(self, fill_floor=GA_FILL_MIN):
+        self.fill_percent = max(fill_floor, min(GA_FILL_MAX, self.fill_percent))
+        self.smooth_iterations = max(GA_SMOOTH_MIN, min(GA_SMOOTH_MAX, self.smooth_iterations))
+        self.wall_birth_limit = max(GA_LIMIT_MIN, min(GA_LIMIT_MAX, self.wall_birth_limit))
+        self.wall_death_limit = max(GA_LIMIT_MIN, min(GA_LIMIT_MAX, self.wall_death_limit))
+
+
+def crossover(parent_a, parent_b):
+    return MapGenotype(
+        fill_percent=random.choice([parent_a.fill_percent, parent_b.fill_percent]),
+        smooth_iterations=random.choice([parent_a.smooth_iterations, parent_b.smooth_iterations]),
+        wall_birth_limit=random.choice([parent_a.wall_birth_limit, parent_b.wall_birth_limit]),
+        wall_death_limit=random.choice([parent_a.wall_death_limit, parent_b.wall_death_limit]),
+    )
+
 
 @dataclass
 class Candidate:
     genotype: MapGenotype
     fitness: float = 0.0
 
+
 class GeneticOptimizer:
     def __init__(self):
         self.current_genotype = MapGenotype(
-            fill_percent=0.40,
-            smooth_iterations=4,
-            wall_death_limit=4,
-            wall_birth_limit=4
+            fill_percent=MAP_FILL_PERCENT,
+            smooth_iterations=MAP_SMOOTH_ITERATIONS,
+            wall_birth_limit=MAP_WALL_BIRTH_LIMIT,
+            wall_death_limit=MAP_WALL_DEATH_LIMIT,
         )
+        self.survivors = []
         self.generation = 0
-        self.last_fitness = 0.0  # read by main.py's HUD
+        self.last_fitness = 0.0
+        self.difficulty_mult = 1.0
+
+    def fill_floor_for(self, level):
+        pressure = min(GA_LEVEL_PRESSURE_MAX, level * GA_LEVEL_PRESSURE_PER_LEVEL)
+        floor = (GA_FILL_MIN + pressure) * self.difficulty_mult
+        return max(GA_FILL_MIN, min(GA_FILL_MAX, floor))
 
     def evolve(self, grid_class, width, height, level):
-        """
-        Evolves the next level's parameters.
-        Generates candidates, tests them (simulates map gen + A*), and picks the best.
-        """
         self.generation += 1
-        population_size = 5 # Small population for real-time speed
-        candidates = []
+        floor = self.fill_floor_for(level)
 
-        # 1. Elitism: Keep current winner but mutate slightly
-        parent = self.current_genotype
-        
-        for _ in range(population_size):
-            # Create child
-            child_genes = copy.deepcopy(parent)
-            child_genes.mutate()
-            
-            # Force harder parameters based on level
-            # Higher level -> Drift towards higher fill (more complex)
-            level_pressure = min(0.10, level * 0.01)
-            child_genes.fill_percent = min(0.55, child_genes.fill_percent + level_pressure)
+        parents = self.survivors or [self.current_genotype]
 
-            # Evaluate Fitness
-            fitness = self.evaluate_fitness(child_genes, grid_class, width, height)
-            candidates.append(Candidate(child_genes, fitness))
+        population = [copy.deepcopy(g) for g in parents]
+        for genotype in population:
+            genotype.clamp(floor)
 
-        # 2. Selection: Pick best
+        while len(population) < GA_POPULATION_SIZE:
+            parent_a = random.choice(parents)
+            parent_b = random.choice(parents)
+            child = crossover(parent_a, parent_b)
+            child.mutate(fill_floor=floor)
+            population.append(child)
+
+        candidates = [
+            Candidate(g, self.evaluate_fitness(g, grid_class, width, height))
+            for g in population
+        ]
         candidates.sort(key=lambda c: c.fitness, reverse=True)
-        best_candidate = candidates[0]
-        
-        print(f"[GA] Gen {self.generation} | Best Fitness: {best_candidate.fitness:.2f} | Genes: {best_candidate.genotype}")
-        
-        self.current_genotype = best_candidate.genotype
-        self.last_fitness = best_candidate.fitness
-        return self.current_genotype
+
+        best = candidates[0]
+        self.survivors = [c.genotype for c in candidates[:GA_SURVIVORS]]
+        self.current_genotype = best.genotype
+        self.last_fitness = best.fitness
+
+        print(f"[GA] Gen {self.generation} | Level {level} | "
+              f"Best fitness: {best.fitness:.1f} | Genes: {best.genotype}")
+        return best.genotype
 
     def evaluate_fitness(self, genes, grid_class, width, height):
-        """
-        Simulate a map generation and measure difficulty.
-        Fitness = Path Length (A*) 
-        Penalty = 0 if no path exists.
-        """
-        # Create a temporary lightweight grid simulation
-        # We can't use the full Pygame Grid because it loads images/rects.
-        # We need a simulation method or just use the Grid class if it's light enough.
-        # Grid class seems light (just logic + rects).
-        
-        try:
-            # Generate Map with these genes
-            # Note: We need to pass the genes to the map generator.
-            # We'll use a helper on the Grid class or just assume we can patch it.
-            # For now, let's assume we instantiate a grid and run the algo.
-            
-            # To avoid dependency cycles or heavy init, we assume Grid has a static-like method
-            # or we instantiate it. grid.py imports pygame, which is fine.
-            
-            # We instantiate a minimal grid (no draw calls needed)
-            sim_grid = grid_class(width, height, 1, headless=True) # 1 = dummy tile size
-            sim_grid.apply_genes(genes)
-            
-            start_node = sim_grid.nodes[1][1]
-            end_node = sim_grid.nodes[width-2][height-2]
-            
-            path = sim_grid.find_path(start_node, end_node)
-            
-            if not path:
-                return 0.0 # Unsolvable = Trash
-            
-            # Fitness = Length
-            return len(path)
-            
-        except Exception as e:
-            print(f"[GA] Eval Error: {e}")
-            return 0.0
+        total = 0.0
+        for _ in range(GA_FITNESS_SAMPLES):
+            try:
+                sim_grid = grid_class(width, height, 1, headless=True)
+                sim_grid.apply_genes(genes)
+                start_node = sim_grid.nodes[1][1]
+                end_node = sim_grid.nodes[width - 2][height - 2]
+                path = sim_grid.find_path(start_node, end_node)
+                total += len(path)
+            except Exception as error:
+                print(f"[GA] evaluation error: {error}")
+        return total / GA_FITNESS_SAMPLES
